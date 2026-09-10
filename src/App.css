@@ -90,6 +90,7 @@ select, .stepper { display: block; width: 100%; margin-top: 4px; border: 1px sol
 .token-box { text-align: center; background: var(--mint); border-radius: 5px; padding: 13px; }
 .token-box span, .token-box small { display: block; color: var(--muted); font: 8px var(--mono); }
 .token-box strong { display: block; color: var(--mint-deep); font: 700 25px var(--mono); letter-spacing: 2px; margin: 4px 0; }
+.order-confirmation { background: #fffaf0; border: 1px solid #f0dfad; border-radius: 5px; padding: 12px 14px; margin-top: 10px; color: var(--ink); }.order-confirmation strong, .order-confirmation p, .order-confirmation small { display: block; }.order-confirmation strong { font-size: 10px; }.order-confirmation p { color: var(--muted); font-size: 10px; line-height: 1.5; margin-top: 5px; }.order-confirmation p b { color: var(--ink); font-weight: 700; }.order-confirmation small { color: var(--muted); font: 8px var(--mono); margin-top: 6px; }
 .owner-layout { max-width: 1150px; margin: auto; padding: 70px 6% 85px; }
 .owner-title { display: flex; justify-content: space-between; align-items: end; margin-bottom: 43px; }
 .owner-title h1 { font-size: 35px; letter-spacing: -2px; margin: 11px 0 8px; }
