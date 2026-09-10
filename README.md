@@ -20,6 +20,14 @@ pip install -r backend/requirements.txt
 uvicorn backend.main:app --reload --port 8000
 ```
 
+Verify Atlas independently with:
+
+```powershell
+py -3.14 backend/test_mongodb.py
+```
+
+Successful output is `MongoDB connected successfully!`. If the password contains `@`, `:`, `/`, `?`, `#`, `[`, `]`, or `%`, URL-encode it before placing it in `MONGODB_URI`.
+
 Copy `backend/.env.example` to `backend/.env` and set `MONGODB_URI` to a MongoDB Atlas or local MongoDB connection string. The API creates a TTL index on `expires_at`, so order records expire after 24 hours. Without a MongoDB URI, development orders use in-memory storage.
 
 Set the Twilio variables in the same environment to send real pickup-token SMS messages. Without them, the API returns `sms.sent: false` while the frontend still completes mock payment.
@@ -42,6 +50,6 @@ The Vite dev server proxies `/api` requests to `http://127.0.0.1:8000`.
 	- Publish directory: `dist`
 	- Environment variable: `VITE_API_URL=https://doxie-api.onrender.com`
 6. Copy the frontend Render URL into the backend's `FRONTEND_ORIGIN`, redeploy the backend, and open the frontend URL.
-7. Test `https://your-backend.onrender.com/api/health`. It should return `{"status":"ok","database":"mongodb"}`.
+7. Test `https://your-backend.onrender.com/api/health`. It should return `{"status":"ok","database":"mongodb"}` when Atlas is connected. A configured but unavailable Atlas returns `{"status":"degraded","database":"unavailable"}` while the app remains up.
 
 Keep `backend/.env` local. Add MongoDB and Twilio values through Render's Environment settings, never in GitHub.

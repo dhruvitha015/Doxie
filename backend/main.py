@@ -1,23 +1,28 @@
 from datetime import datetime, timedelta, timezone
+import logging
 import os
 import re
 import secrets
 from typing import Any
 
+import certifi
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
+from pymongo.errors import PyMongoError
 
 load_dotenv()
+logger = logging.getLogger("doxie.mongodb")
 MONGODB_URI = os.getenv("MONGODB_URI", "")
-MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "doxie")
+MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "doxie").strip() or "doxie"
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
-client = AsyncIOMotorClient(MONGODB_URI, serverSelectionTimeoutMS=5000) if MONGODB_URI else None
+mongo_client: AsyncIOMotorClient | None = None
+mongo_ready = False
 memory_orders: list[dict[str, Any]] = []
 
 app = FastAPI(title="Doxie API", version="0.1.0")
@@ -54,21 +59,44 @@ def local_reply(message: str, files: list[dict[str, Any]], paid: bool) -> str:
 
 @app.on_event("startup")
 async def create_indexes() -> None:
-    if client:
-        await client[MONGODB_DATABASE].orders.create_index("expires_at", expireAfterSeconds=0)
+    global mongo_client, mongo_ready
+    if not MONGODB_URI:
+        logger.warning("MONGODB_URI is not configured; using in-memory order storage")
+        return
+    if not MONGODB_URI.startswith("mongodb+srv://"):
+        logger.error("MONGODB_URI must use the mongodb+srv:// Atlas format; using in-memory order storage")
+        return
+    try:
+        mongo_client = AsyncIOMotorClient(MONGODB_URI, tls=True, tlsCAFile=certifi.where(), serverSelectionTimeoutMS=10000, connectTimeoutMS=10000, retryWrites=True)
+        await mongo_client.admin.command("ping")
+        await mongo_client[MONGODB_DATABASE].orders.create_index("expires_at", expireAfterSeconds=0)
+        mongo_ready = True
+        logger.info("MongoDB connected successfully")
+    except PyMongoError as error:
+        mongo_ready = False
+        if mongo_client:
+            mongo_client.close()
+            mongo_client = None
+        logger.error("MongoDB connection unavailable (%s); using in-memory order storage", type(error).__name__)
 
 
 @app.on_event("shutdown")
 async def close_database() -> None:
-    if client:
-        client.close()
+    if mongo_client:
+        mongo_client.close()
 
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    if not client:
+    if not MONGODB_URI:
         return {"status": "ok", "database": "memory"}
-    await client.admin.command("ping")
+    if not mongo_ready or not mongo_client:
+        return {"status": "degraded", "database": "unavailable"}
+    try:
+        await mongo_client.admin.command("ping")
+    except PyMongoError as error:
+        logger.error("MongoDB health check failed (%s)", type(error).__name__)
+        return {"status": "degraded", "database": "unavailable"}
     return {"status": "ok", "database": "mongodb"}
 
 
@@ -81,8 +109,12 @@ async def chat(request: ChatRequest) -> dict[str, str]:
 async def create_order(request: OrderRequest) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     order = {"token": f"DX-{secrets.randbelow(9000) + 1000}", "mobile": request.mobile, "total": request.total, "files": request.files, "status": "paid", "created_at": now, "expires_at": now + timedelta(hours=24)}
-    if client:
-        await client[MONGODB_DATABASE].orders.insert_one(order)
+    if mongo_ready and mongo_client:
+        try:
+            await mongo_client[MONGODB_DATABASE].orders.insert_one(order)
+        except PyMongoError as error:
+            logger.error("MongoDB order write failed (%s); using in-memory order storage", type(error).__name__)
+            memory_orders.append(order)
     else:
         memory_orders.append(order)
     sms_sent = await send_token_sms(request.mobile, order["token"])
@@ -99,7 +131,14 @@ async def send_token_sms(mobile: str, token: str) -> bool:
 
 @app.get("/api/orders/{token}")
 async def get_order(token: str) -> dict[str, Any]:
-    order = await client[MONGODB_DATABASE].orders.find_one({"token": token}, {"_id": 0}) if client else next((item for item in memory_orders if item["token"] == token), None)
+    order = None
+    if mongo_ready and mongo_client:
+        try:
+            order = await mongo_client[MONGODB_DATABASE].orders.find_one({"token": token}, {"_id": 0})
+        except PyMongoError as error:
+            logger.error("MongoDB order lookup failed (%s)", type(error).__name__)
+    if order is None:
+        order = next((item for item in memory_orders if item["token"] == token), None)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
