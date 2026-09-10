@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 load_dotenv()
 MONGODB_URI = os.getenv("MONGODB_URI", "")
 MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "doxie")
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER", "")
@@ -20,7 +21,8 @@ client = AsyncIOMotorClient(MONGODB_URI, serverSelectionTimeoutMS=5000) if MONGO
 memory_orders: list[dict[str, Any]] = []
 
 app = FastAPI(title="Doxie API", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
+allowed_origins = ["http://localhost:5173", "http://127.0.0.1:5173"] + [origin.strip() for origin in FRONTEND_ORIGIN.split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_methods=["*"], allow_headers=["*"])
 
 
 class ChatRequest(BaseModel):

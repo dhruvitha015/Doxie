@@ -10,6 +10,7 @@ const orders = [
 const newFile = (file, index) => ({ id: `${file.name}-${index}-${Date.now()}`, name: file.name, pages: 1, copies: 1, sides: 'Single-sided', size: 'A4' })
 const money = (value) => `₹${value}`
 const maskPhone = (phone) => phone.length >= 4 ? `******${phone.slice(-4)}` : phone
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 function assistantReply(text, files, paid) {
   const input = text.toLowerCase()
@@ -24,7 +25,7 @@ function assistantReply(text, files, paid) {
 
 async function getAssistantReply(text, files, paid) {
   try {
-    const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, files, paid }) })
+    const response = await fetch(`${API_BASE_URL}/api/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, files, paid }) })
     if (response.ok) {
       const data = await response.json()
       if (data.reply) return data.reply
@@ -93,7 +94,7 @@ function App() {
     }
     let token = 'DX-2049'
     try {
-      const response = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile, total, files }) })
+      const response = await fetch(`${API_BASE_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile, total, files }) })
       if (response.ok) {
         const data = await response.json()
         token = data.token || token
