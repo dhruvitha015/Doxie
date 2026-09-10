@@ -13,7 +13,6 @@ const orders = [
 
 const newFile = (file, index, pages = 1) => ({ id: `${file.name}-${index}-${Date.now()}`, name: file.name, pages, copies: 1, sides: 'Single-sided', size: 'A4' })
 const money = (value) => `₹${value}`
-const maskPhone = (phone) => phone.length >= 4 ? `******${phone.slice(-4)}` : phone
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 function assistantReply(text, files, paid) {
@@ -51,6 +50,7 @@ function App() {
   const [mobile, setMobile] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [token, setToken] = useState('')
+  const [paymentError, setPaymentError] = useState('')
 
   const total = useMemo(() => files.reduce((sum, file) => sum + (file.pages * file.copies * (file.sides === 'Single-sided' ? 3 : 4)), 0), [files])
   const fileCount = files.length
@@ -102,10 +102,12 @@ function App() {
   }
 
   async function pay() {
+    if (paid) return
     if (!/^\d{10}$/.test(mobile)) {
-      addMessage('doxie', 'Please enter a valid 10-digit mobile number so I can send your pickup token by SMS.')
+      setPaymentError('Enter a valid 10-digit mobile number to receive your pickup token by SMS.')
       return
     }
+    setPaymentError('')
     let token = 'DX-2049'
     try {
       const response = await fetch(`${API_BASE_URL}/api/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile, total, files }) })
@@ -119,8 +121,6 @@ function App() {
     setToken(token)
     setPaid(true)
     setStage('complete')
-    addMessage('user', `Pay ${money(total)}`)
-    addMessage('doxie', `Payment received. Your pickup token ${token} has been sent by SMS to ${maskPhone(mobile)}. Keep it handy at the counter; your files will be deleted automatically after 24 hours.`)
   }
 
   function sendMessage(event) {
@@ -142,6 +142,7 @@ function App() {
         {stage === 'choice' && <div className="quick-replies"><button type="button" onClick={() => chooseMode('bulk')}>Print in bulk</button><button type="button" onClick={() => chooseMode('individual')}>One by one</button></div>}
         {(stage === 'customize' || stage === 'payment' || stage === 'complete') && <div className="file-settings"><div className="settings-title"><span>{mode === 'bulk' ? 'BULK SETTINGS' : 'FILE SETTINGS'}</span><b>{fileCount} file{fileCount > 1 ? 's' : ''}</b></div>{files.map((file) => <div className="file-setting" key={file.id}><div className="file-setting-head"><span className="file-icon">PDF</span><div><strong>{file.name}</strong><small>{file.pages} page{file.pages > 1 ? 's' : ''} · {money(priceFor(file))}</small></div></div><div className="file-controls"><label>Pages<input type="number" min="1" value={file.pages} disabled={stage === 'complete'} onChange={(event) => mode === 'bulk' ? applyBulk('pages', event.target.value) : updateFile(file.id, 'pages', event.target.value)} /></label><label>Copies<input type="number" min="1" value={file.copies} disabled={stage === 'complete'} onChange={(event) => mode === 'bulk' ? applyBulk('copies', event.target.value) : updateFile(file.id, 'copies', event.target.value)} /></label><label>Sides<select value={file.sides} disabled={stage === 'complete'} onChange={(event) => mode === 'bulk' ? applyBulk('sides', event.target.value) : updateFile(file.id, 'sides', event.target.value)}><option>Single-sided</option><option>Double-sided</option></select></label></div></div>)}{stage === 'customize' && <><div className="charge-note">Single-sided <b>₹3/page</b> · Double-sided <b>₹4/page</b></div><button className="finalize-button" type="button" onClick={finalize}>Shall I finalize this order? <span>→</span></button></>}</div>}
         {stage === 'complete' && <div className="token-box"><span>Paid · pickup token</span><strong>{token}</strong><small>Show this token at the counter · expires in 24h</small></div>}
+        {paymentError && <div className="payment-error payment-error-below-settings">{paymentError}</div>}
       </div><div className="chat-foot">{stage === 'payment' && <div className="payment-card"><div><span className="section-kicker">ORDER TOTAL</span><strong>{money(total)}</strong><small>{fileCount} file{fileCount > 1 ? 's' : ''} · includes every page and copy</small><label className="mobile-label">Mobile number<input type="tel" inputMode="numeric" maxLength="10" value={mobile} onChange={(event) => setMobile(event.target.value.replace(/\D/g, ''))} placeholder="10-digit number" aria-label="Mobile number for pickup token" /></label></div><button className="pay-button" type="button" onClick={pay}>Pay securely <span>→</span></button><p>Mock payment now · token SMS ready · Razorpay integration ready</p></div>}<div className="composer-row"><label className="upload-button" title="Upload more documents"><span>＋</span><input type="file" multiple accept=".pdf,.doc,.docx" onChange={handleFiles} /> Add files</label><form onSubmit={sendMessage}><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask Doxie anything..." aria-label="Message Doxie" /><button type="submit" aria-label="Send message">↑</button></form></div></div></section></main> : <main className="owner-layout"><div className="owner-title"><div><span className="section-kicker">STORE OPERATIONS</span><h1>Good morning, Arjun.</h1><p>Here’s what’s happening at Doxie today.</p></div><button className="outline-button" type="button">＋ New order</button></div><div className="stat-grid"><div><span>Orders today</span><strong>24</strong><small className="up">↗ 18% vs yesterday</small></div><div><span>In progress</span><strong>07</strong><small>2 need attention</small></div><div><span>Revenue today</span><strong>₹2,840</strong><small className="up">↗ 12% vs yesterday</small></div><div><span>Avg. turnaround</span><strong>18<span> min</span></strong><small>Last 7 days</small></div></div><div className="owner-grid"><section className="orders-table"><div className="table-head"><div><span className="section-kicker">LIVE QUEUE</span><h2>Recent orders</h2></div><button className="filter-button" type="button">Today⌄</button></div>{orders.map((order) => <div className="order-row" key={order.token}><div className="order-token">{order.token}</div><div className="order-name"><strong>{order.name}</strong><span>{order.detail}</span></div><span className={`status-badge ${order.tone}`}><i /> {order.status}</span><button className="dots-button" type="button">•••</button></div>)}</section><section className="verify-panel"><span className="section-kicker">COUNTER TOOL</span><h2>Verify a token</h2><p>Confirm a student's order before handing it over.</p><div className="token-input"><input placeholder="e.g. DX-2048" aria-label="Token to verify" /><button type="button">Check</button></div><div className="verification-card"><span className="verified-icon">✓</span><div><strong>DX-2048 is ready</strong><span>Digital Marketing Notes.pdf · 12 pages</span></div></div></section></div></main>}
     </div>
   )
